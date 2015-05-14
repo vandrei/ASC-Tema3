@@ -109,16 +109,15 @@ void computeLineOfBlocks(unsigned char *blocks, spu_param *param, int processed,
        for (i = 0; i < blocksPerLine; i++) {
             int destinationOffset = tid * lines * blocksPerLine + processed * blocksPerLine + i;
             
-            printf("size of shit: %d\n", sizeof(struct myBlock));
-            //mfc_put((void *) &resultingBlocks[i], (unsigned int) cmpImage + destinationOffset, (uint32_t) sizeof(struct myBlock), tag_id, 0, 0);
-            
+            mfc_put((void *)&resultingBlocks[i], (uint32_t) &cmpImage[destinationOffset], (uint32_t) sizeof(struct myBlock), tag_id, 0, 0);
         }
         
         int j;
 
         for (i = 0; i < N; i++) {
-            int offset = i * lineWidth * sizeof(unsigned char);
-            //mfc_put((void *) blocks + offset, (unsigned int) pgmImage + threadOffset + processed * N * lineWidth * sizeof(unsigned char) + offset, (uint32_t)lineWidth * sizeof(unsigned char), tag_id, 0, 0);
+            int offset = i * lineWidth;
+            int imgOffset = threadOffset + offset + processed * N * lineWidth;
+            mfc_put(blocks + offset, (uint32_t) pgmImage + imgOffset, (uint32_t)lineWidth * sizeof(unsigned char), tag_id, 0, 0);
         }
 
         waitag(tag_id);
@@ -197,7 +196,7 @@ int main(unsigned long long speid,
     int threadStartPosition = param.threadIndex * N * param.lines * param.lineWidth;
     int linesToProcess = param.lines + param.remainingLines;
 
-    while(processed < 1) {
+    while(processed < linesToProcess) {
         printf("-----\n\n");
         printf("processed: %d\nlinesToProcess:%d\n", processed, linesToProcess);
         int blockPosition = processed * N * param.lineWidth;
@@ -207,9 +206,6 @@ int main(unsigned long long speid,
         for (i = 0; i < N; i++) {
             int blockOffset = i * param.lineWidth;
             int imageOffset = i * param.lineWidth + threadStartPosition + blockPosition;
-            //printf("lineSize: %d\n", lineSize);
-            //printf("blockOffset: %d\n", blockOffset);
-            //printf("imageOffset: %d\n", imageOffset);
             mfc_get(&lineOfBlocks[blockOffset], (uint32_t) &param.originalImagePixels[imageOffset], lineSize, tag_id, 0, 0);
         }
 
