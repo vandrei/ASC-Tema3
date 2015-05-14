@@ -94,11 +94,8 @@ int main(int argc, char **argv)
         read_pgm(inputFile, &originalImage);
         gettimeofday(&computationalTimeStart, NULL);
 
-        struct img image __attribute__ ((aligned(ALIGNMENT)));
-        image.height = originalImage.height;
-        image.width = originalImage.width;
-        image.pixels = (unsigned char *)_alloc(originalImage.width * originalImage.height * sizeof(unsigned char));
-        memcpy(image.pixels, originalImage.pixels, image.width * image.height * sizeof(unsigned char));
+        unsigned char originalPixels[originalImage.height * originalImage.width] __attribute__ ((aligned(ALIGNMENT)));
+        memcpy(originalPixels, originalImage.pixels, originalImage.width * originalImage.height * sizeof(unsigned char));
         
         struct img pgmImage __attribute__ ((aligned(ALIGNMENT)));
         pgmImage.width = originalImage.width;
@@ -117,12 +114,13 @@ int main(int argc, char **argv)
        
         pthread_t threads[spuCount];
         spu_param messages[spuCount] __attribute__ ((aligned(ALIGNMENT)));
-        
+       
+        printf("Image size: %d x %d\n\n", originalImage.height, originalImage.width); 
         int i;
         for (i = 0; i < spuCount; i++) {
             messages[i].threadIndex = i;
-            messages[i].originalImagePixels = image.pixels;
-            messages[i].lines = image.height / N / spuCount;
+            messages[i].originalImagePixels = originalPixels;
+            messages[i].lines = originalImage.height / N / spuCount;
             messages[i].lineWidth = originalImage.width;
             messages[i].operationMode = computationMode;
             if (i == spuCount - 1) {
@@ -148,15 +146,27 @@ int main(int argc, char **argv)
         for (i = 0; i < originalImage.height / N; i++) {
             for (j = 0; j < originalImage.width / N; j++) {
                 int offset = originalImage.width / N * i + j;
-                printf("offset: %d\n", offset);
                 cmpImage.blocks[offset].min = cmpImageBlocks[offset].min;
                 cmpImage.blocks[offset].max = cmpImageBlocks[offset].max;
-                memcpy(cmpImage.blocks[offset].index_matrix, cmpImageBlocks[offset].index_matrix, sizeof(N * N * sizeof(unsigned char)));
+                memcpy(cmpImage.blocks[offset].index_matrix, cmpImageBlocks[offset].index_matrix, N * N * sizeof(unsigned char));
             }
         }
 
-        memcpy(pgmImage.pixels, pgmPixels, sizeof(originalImage.width * originalImage.height * sizeof(unsigned char)));
+        memcpy(pgmImage.pixels, pgmPixels, originalImage.width * originalImage.height * sizeof(unsigned char));
       
+        /*for (i = 0; i < originalImage.height/N;i++) {
+            for (j = 0; j < originalImage.width/N;j++) {
+                int x,y;
+                for (x = 0; x < N; x++) {
+                    for (y = 0; y < N; y++) {
+                        int offset = originalImage.width / N * i + j;
+                        printf("%d ", cmpImage.blocks[offset].index_matrix[x * N + y]);
+                    }
+                    printf("\n");
+                }
+            }
+        }*/
+
         gettimeofday(&computationalTimeEnd, NULL);
         write_cmp(cmpOutputFile, &cmpImage);
         write_pgm(pgmOutputFile, &pgmImage);

@@ -41,7 +41,7 @@ void computeLineOfBlocks(unsigned char *blocks, spu_param *param, int processed,
     int computationMode = param->operationMode;
 
     int i, j;
-    for (i = 0; i < N; i++) {
+  /*  for (i = 0; i < N; i++) {
         for (j = 0; j < lineWidth; j++) {
             printf("%d ", *(blocks + i * lineWidth + j));
         }
@@ -49,7 +49,7 @@ void computeLineOfBlocks(unsigned char *blocks, spu_param *param, int processed,
     }
 
     printf("\n\n\n");
-    
+    */
     if (computationMode == 0) {
         //scalar version
         int i;
@@ -62,7 +62,7 @@ void computeLineOfBlocks(unsigned char *blocks, spu_param *param, int processed,
             for (row = 0; row < N; row++) {
                 for (col = 0; col < N; col++) {
                     int offset = i * N + col + row * lineWidth;
-                    int number = *(blocks + offset);
+                    int number = (int)*(blocks + offset);
                     if (number < min)
                         min = number;
 
@@ -75,41 +75,51 @@ void computeLineOfBlocks(unsigned char *blocks, spu_param *param, int processed,
             resultingBlocks[i].min = min;
             resultingBlocks[i].max = max;
 
-            int step = (max - min) / (N - 1);
+            float step = (max - min) / (float)(N - 1);
             
             for (row = 0; row < N; row++) {
                 for (col = 0; col < N; col++) {
                     int offset = i * N + col + row * lineWidth;
                     unsigned char *number = blocks + offset;
+                    float value = *number;
 
-                    *number -= min;
-                    *number /= step;
-                    *number = (unsigned char)(*number + 0.5);
+                    value -= min;
+                    value /= step;
+                    value += 0.5;
+                    *number = (unsigned char)(value);
                     resultingBlocks[i].index_matrix[row * N + col] = *number;
 
-                    *number *= step;
-                    *number += min;
+                    value = (float) *number;
+                    value *= step;
+                    value += min;
+                    value += 0.5;
+                    *number = (unsigned char)value;
                 }
             }
+
         }
 
-        for (i = 0; i < N; i++) {
+      /*  for (i = 0; i < N; i++) {
         for (j = 0; j < lineWidth; j++) {
             printf("%d ", *(blocks + i * lineWidth + j));
         }
         printf("\n");
     }
-        
-        for (i = 0; i < blocksPerLine; i++) {
+        */
+       for (i = 0; i < blocksPerLine; i++) {
             int destinationOffset = tid * lines * blocksPerLine + processed * blocksPerLine + i;
             
             printf("size of shit: %d\n", sizeof(struct myBlock));
-            mfc_put((void *) &resultingBlocks[i], (unsigned int) cmpImage + destinationOffset, (uint32_t) sizeof(struct myBlock), tag_id, 0, 0);
+            //mfc_put((void *) &resultingBlocks[i], (unsigned int) cmpImage + destinationOffset, (uint32_t) sizeof(struct myBlock), tag_id, 0, 0);
             
         }
         
         int j;
-        mfc_put((void *) blocks, (unsigned int) pgmImage + threadOffset + processed * N * lineWidth * sizeof(unsigned char), (uint32_t)lineWidth * N * sizeof(unsigned char), tag_id, 0, 0);
+
+        for (i = 0; i < N; i++) {
+            int offset = i * lineWidth * sizeof(unsigned char);
+            //mfc_put((void *) blocks + offset, (unsigned int) pgmImage + threadOffset + processed * N * lineWidth * sizeof(unsigned char) + offset, (uint32_t)lineWidth * sizeof(unsigned char), tag_id, 0, 0);
+        }
 
         waitag(tag_id);
     } else if (computationMode == 1) {
@@ -178,7 +188,7 @@ int main(unsigned long long speid,
     mfc_get((void *)&param, argp, spu_param_size, tag_id, 0, 0);
     waitag(tag_id);
 
-    unsigned char lineOfBlocks[N * param.lineWidth] __attribute__((aligned(ALIGNMENT)));
+    uint32_t lineSize = (uint32_t)param.lineWidth * sizeof(unsigned char);
     int i = 0;
     int processed = 0;
     int blocksPerLine = 0;
@@ -187,19 +197,23 @@ int main(unsigned long long speid,
     int threadStartPosition = param.threadIndex * N * param.lines * param.lineWidth;
     int linesToProcess = param.lines + param.remainingLines;
 
-    while(processed < linesToProcess) {
+    while(processed < 1) {
+        printf("-----\n\n");
+        printf("processed: %d\nlinesToProcess:%d\n", processed, linesToProcess);
         int blockPosition = processed * N * param.lineWidth;
         
-        int32_t lineSize = (uint32_t)param.lineWidth * sizeof(unsigned char);
-/*        for (i = 0; i < N; i++) {
-            unsigned char *buffer = lineOfBlocks + (i * param.lineWidth);
-            uint32_t argp = (uint32_t) (param.originalImagePixels + (i * lineSize) + threadStartPosition + blockPosition);
-            mfc_get((void *)buffer, argp, lineSize, tag_id, 0, 0);
+        unsigned char lineOfBlocks[N * param.lineWidth] __attribute__((aligned(ALIGNMENT)));
+    
+        for (i = 0; i < N; i++) {
+            int blockOffset = i * param.lineWidth;
+            int imageOffset = i * param.lineWidth + threadStartPosition + blockPosition;
+            //printf("lineSize: %d\n", lineSize);
+            //printf("blockOffset: %d\n", blockOffset);
+            //printf("imageOffset: %d\n", imageOffset);
+            mfc_get(&lineOfBlocks[blockOffset], (uint32_t) &param.originalImagePixels[imageOffset], lineSize, tag_id, 0, 0);
         }
-*/
-        mfc_get((void *)lineOfBlocks, param.originalImagePixels + threadStartPosition + blockPosition, N * lineSize, tag_id, 0, 0);
 
-         waitag(tag_id);
+        waitag(tag_id);
         //compress
         //
         computeLineOfBlocks(lineOfBlocks, &param, processed, threadStartPosition, blocksPerLine, tag_id);
